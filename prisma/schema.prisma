@@ -1,0 +1,494 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================
+// ENUMS
+// ============================================================
+
+enum UserRole {
+  OWNER
+  ADMIN
+  FINANCE_MANAGER
+  ANALYST
+  VIEWER
+}
+
+enum AccountType {
+  BANK
+  CASH
+  CREDIT
+  INVESTMENT
+  OTHER
+}
+
+enum TransactionType {
+  INFLOW
+  OUTFLOW
+}
+
+enum TransactionStatus {
+  PENDING
+  CLEARED
+  RECONCILED
+  VOID
+}
+
+enum ReceivableStatus {
+  DRAFT
+  SENT
+  PARTIALLY_PAID
+  PAID
+  OVERDUE
+  CANCELLED
+}
+
+enum PayableStatus {
+  DRAFT
+  APPROVED
+  PARTIALLY_PAID
+  PAID
+  OVERDUE
+  CANCELLED
+}
+
+enum CategoryType {
+  INCOME
+  EXPENSE
+}
+
+enum ForecastScenario {
+  BASE
+  OPTIMISTIC
+  PESSIMISTIC
+  CUSTOM
+}
+
+enum AlertSeverity {
+  INFO
+  WARNING
+  CRITICAL
+}
+
+enum AlertType {
+  LOW_CASH
+  CASH_SHORTAGE
+  OVERDUE_RECEIVABLE
+  OVERDUE_PAYABLE
+  LARGE_UPCOMING_PAYMENT
+  NEGATIVE_CASH_FLOW
+  EXPENSE_INCREASE
+  BUDGET_OVERRUN
+  CUSTOM
+}
+
+enum AlertStatus {
+  ACTIVE
+  ACKNOWLEDGED
+  RESOLVED
+}
+
+enum BudgetPeriod {
+  MONTHLY
+  QUARTERLY
+  YEARLY
+}
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+  LOGIN
+  LOGOUT
+  CSV_IMPORT
+  FORECAST_GENERATED
+  ROLE_CHANGED
+  SETTINGS_CHANGED
+  DEMO_LOADED
+}
+
+// ============================================================
+// USER & AUTH
+// ============================================================
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  name          String?
+  passwordHash  String?
+  emailVerified DateTime?
+  image         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  accounts    Account[]
+  sessions    Session[]
+  memberships CompanyMember[]
+  auditLogs   AuditLog[]
+
+  @@index([email])
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// ============================================================
+// COMPANY & MEMBERSHIP
+// ============================================================
+
+model Company {
+  id                String   @id @default(cuid())
+  name              String
+  slug              String   @unique
+  currency          String   @default("INR")
+  currencySymbol    String   @default("₹")
+  minCashThreshold  BigInt   @default(0) // stored in minor units (paise)
+  fiscalYearStart   Int      @default(4) // month: 4 = April (India default)
+  industry          String?
+  website           String?
+  logoUrl           String?
+  isDemo            Boolean  @default(false)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  members         CompanyMember[]
+  financialAccounts FinancialAccount[]
+  transactions    Transaction[]
+  categories      Category[]
+  receivables     Receivable[]
+  payables        Payable[]
+  forecasts       Forecast[]
+  budgets         Budget[]
+  alerts          Alert[]
+  auditLogs       AuditLog[]
+
+  @@index([slug])
+}
+
+model CompanyMember {
+  id        String   @id @default(cuid())
+  userId    String
+  companyId String
+  role      UserRole @default(VIEWER)
+  isActive  Boolean  @default(true)
+  joinedAt  DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, companyId])
+  @@index([userId])
+  @@index([companyId])
+}
+
+// ============================================================
+// FINANCIAL ACCOUNTS
+// ============================================================
+
+model FinancialAccount {
+  id          String      @id @default(cuid())
+  companyId   String
+  name        String
+  type        AccountType
+  bankName    String?
+  accountNumber String?   // last 4 digits only
+  balance     BigInt      @default(0) // in minor units
+  isActive    Boolean     @default(true)
+  description String?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  company      Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  transactions Transaction[]
+
+  @@index([companyId])
+}
+
+// ============================================================
+// CATEGORIES
+// ============================================================
+
+model Category {
+  id          String       @id @default(cuid())
+  companyId   String
+  name        String
+  type        CategoryType
+  color       String?      @default("#6B7280")
+  description String?
+  isSystem    Boolean      @default(false) // pre-seeded categories
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  company      Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  transactions Transaction[]
+  budgets      Budget[]
+
+  @@unique([companyId, name])
+  @@index([companyId])
+}
+
+// ============================================================
+// TRANSACTIONS
+// ============================================================
+
+model Transaction {
+  id          String            @id @default(cuid())
+  companyId   String
+  accountId   String
+  categoryId  String?
+  type        TransactionType
+  status      TransactionStatus @default(CLEARED)
+  amount      BigInt            // in minor units
+  description String
+  reference   String?           // invoice/reference number
+  date        DateTime
+  notes       String?
+  isRecurring Boolean           @default(false)
+  importedFrom String?          // CSV import batch ID
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+  createdById String?
+
+  company  Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  account  FinancialAccount @relation(fields: [accountId], references: [id])
+  category Category?        @relation(fields: [categoryId], references: [id])
+
+  @@index([companyId])
+  @@index([companyId, date])
+  @@index([companyId, type])
+  @@index([companyId, categoryId])
+  @@index([accountId])
+}
+
+// ============================================================
+// RECEIVABLES (Customer Invoices / Expected Inflows)
+// ============================================================
+
+model Receivable {
+  id              String           @id @default(cuid())
+  companyId       String
+  customerName    String
+  customerEmail   String?
+  invoiceNumber   String?
+  description     String
+  amount          BigInt           // in minor units
+  amountPaid      BigInt           @default(0)
+  currency        String           @default("INR")
+  status          ReceivableStatus @default(DRAFT)
+  issueDate       DateTime
+  dueDate         DateTime
+  paidDate        DateTime?
+  notes           String?
+  categoryId      String?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId])
+  @@index([companyId, status])
+  @@index([companyId, dueDate])
+}
+
+// ============================================================
+// PAYABLES (Vendor Bills / Expected Outflows)
+// ============================================================
+
+model Payable {
+  id           String        @id @default(cuid())
+  companyId    String
+  vendorName   String
+  vendorEmail  String?
+  billNumber   String?
+  description  String
+  amount       BigInt        // in minor units
+  amountPaid   BigInt        @default(0)
+  currency     String        @default("INR")
+  status       PayableStatus @default(DRAFT)
+  issueDate    DateTime
+  dueDate      DateTime
+  paidDate     DateTime?
+  notes        String?
+  categoryId   String?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId])
+  @@index([companyId, status])
+  @@index([companyId, dueDate])
+}
+
+// ============================================================
+// FORECASTS
+// ============================================================
+
+model Forecast {
+  id              String           @id @default(cuid())
+  companyId       String
+  scenario        ForecastScenario @default(BASE)
+  name            String?
+  startDate       DateTime
+  endDate         DateTime
+  startingCash    BigInt           // cash at forecast start
+  // Assumptions (stored as basis points for percentages, e.g., 500 = 5%)
+  revenueGrowthBps    Int          @default(0)
+  expenseGrowthBps    Int          @default(0)
+  collectionDelayDays Int          @default(0)
+  paymentDelayDays    Int          @default(0)
+  // Results
+  projectedEndingCash BigInt?
+  minProjectedBalance BigInt?
+  minBalanceDate      DateTime?
+  cashShortageDate    DateTime?
+  cashShortageAmount  BigInt?
+  cashRunwayDays      Int?
+  generatedAt         DateTime     @default(now())
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
+
+  company Company        @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  items   ForecastItem[]
+
+  @@index([companyId])
+  @@index([companyId, scenario])
+}
+
+model ForecastItem {
+  id               String   @id @default(cuid())
+  forecastId       String
+  date             DateTime
+  openingBalance   BigInt
+  inflows          BigInt   @default(0)
+  outflows         BigInt   @default(0)
+  netCashFlow      BigInt   @default(0)
+  closingBalance   BigInt
+  isShortagePeriod Boolean  @default(false)
+
+  forecast Forecast @relation(fields: [forecastId], references: [id], onDelete: Cascade)
+
+  @@index([forecastId])
+  @@index([forecastId, date])
+}
+
+// ============================================================
+// BUDGETS
+// ============================================================
+
+model Budget {
+  id         String       @id @default(cuid())
+  companyId  String
+  categoryId String
+  name       String?
+  period     BudgetPeriod @default(MONTHLY)
+  periodYear Int          // e.g., 2024
+  periodMonth Int?        // 1-12 for monthly
+  periodQuarter Int?      // 1-4 for quarterly
+  budgetedAmount BigInt   // in minor units
+  notes      String?
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+
+  company  Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  category Category @relation(fields: [categoryId], references: [id])
+
+  @@index([companyId])
+  @@index([companyId, periodYear, periodMonth])
+}
+
+// ============================================================
+// ALERTS
+// ============================================================
+
+model Alert {
+  id            String        @id @default(cuid())
+  companyId     String
+  type          AlertType
+  severity      AlertSeverity
+  status        AlertStatus   @default(ACTIVE)
+  title         String
+  description   String
+  amount        BigInt?
+  date          DateTime?
+  relatedEntity String?       // "receivable", "payable", "account"
+  relatedId     String?
+  acknowledgedAt DateTime?
+  resolvedAt    DateTime?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId])
+  @@index([companyId, status])
+  @@index([companyId, severity])
+}
+
+// ============================================================
+// AUDIT LOG
+// ============================================================
+
+model AuditLog {
+  id         String      @id @default(cuid())
+  companyId  String?
+  userId     String?
+  action     AuditAction
+  entity     String?     // "Transaction", "Receivable", etc.
+  entityId   String?
+  oldValues  Json?
+  newValues  Json?
+  metadata   Json?
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime    @default(now())
+
+  company Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  user    User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([companyId])
+  @@index([userId])
+  @@index([companyId, entity])
+  @@index([createdAt])
+}
