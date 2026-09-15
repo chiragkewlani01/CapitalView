@@ -1,15 +1,15 @@
 import { requireAuth } from "@/lib/auth/guards";
 import { prisma } from "@/lib/prisma";
 import { TransactionType, TransactionStatus } from "@prisma/client";
-import { formatCompact, formatCurrency } from "@/lib/calculations";
+import { formatCompact } from "@/lib/calculations";
 import { format } from "date-fns";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
-import { ArrowUpRight, ArrowDownRight, Plus, Upload } from "lucide-react";
+import { ArrowUpRight, ArrowDownRight, Plus } from "lucide-react";
 import { TransactionDialog } from "@/components/transactions/transaction-dialog";
 import { CsvImportDialog } from "@/components/transactions/csv-import-dialog";
 import { TransactionFiltersBar } from "@/components/transactions/transaction-filters";
@@ -56,7 +56,7 @@ export default async function TransactionsPage({ searchParams }: PageProps) {
     if (dateTo) (where.date as Record<string, unknown>).lte = new Date(dateTo + "T23:59:59");
   }
 
-  const [transactions, total, accounts, categories, summary] = await Promise.all([
+  const [transactions, total, accounts, categories] = await Promise.all([
     prisma.transaction.findMany({
       where,
       include: {

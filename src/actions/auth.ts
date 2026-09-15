@@ -5,8 +5,6 @@ import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import { signIn, signOut } from "@/lib/auth";
 import { AuthError } from "next-auth";
-import { createAuditLog } from "@/lib/audit";
-import { AuditAction } from "@prisma/client";
 
 const signupSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters"),

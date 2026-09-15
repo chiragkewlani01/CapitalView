@@ -51,11 +51,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     async session({ session, token }) {
       if (token && session.user) {
         session.user.id = token.id as string;
-        (session.user as Record<string, unknown>).companyId = token.companyId;
-        (session.user as Record<string, unknown>).companyName = token.companyName;
-        (session.user as Record<string, unknown>).companyCurrency = token.companyCurrency;
-        (session.user as Record<string, unknown>).companyCurrencySymbol = token.companyCurrencySymbol;
-        (session.user as Record<string, unknown>).role = token.role;
+        (session.user as unknown as Record<string, unknown>).companyId = token.companyId;
+        (session.user as unknown as Record<string, unknown>).companyName = token.companyName;
+        (session.user as unknown as Record<string, unknown>).companyCurrency = token.companyCurrency;
+        (session.user as unknown as Record<string, unknown>).companyCurrencySymbol = token.companyCurrencySymbol;
+        (session.user as unknown as Record<string, unknown>).role = token.role;
       }
       return session;
     },

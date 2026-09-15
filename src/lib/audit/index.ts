@@ -22,9 +22,9 @@ export async function createAuditLog(entry: AuditLogEntry): Promise<void> {
         action: entry.action,
         entity: entry.entity,
         entityId: entry.entityId,
-        oldValues: entry.oldValues ?? undefined,
-        newValues: entry.newValues ?? undefined,
-        metadata: entry.metadata ?? undefined,
+        oldValues: entry.oldValues ? (entry.oldValues as import("@prisma/client").Prisma.InputJsonValue) : undefined,
+        newValues: entry.newValues ? (entry.newValues as import("@prisma/client").Prisma.InputJsonValue) : undefined,
+        metadata: entry.metadata ? (entry.metadata as import("@prisma/client").Prisma.InputJsonValue) : undefined,
         ipAddress: entry.ipAddress,
       },
     });

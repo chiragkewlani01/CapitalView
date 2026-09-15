@@ -88,11 +88,22 @@ const REQUIRED_COLUMNS = ["date", "description", "amount", "type"];
 const OPTIONAL_COLUMNS = ["reference", "notes", "category"];
 
 export function parseCsv(csvText: string): CsvParseResult {
-  const result = Papa.parse<Record<string, string>>(csvText, {
+  let parseData: Papa.ParseResult<Record<string, string>> | null = null;
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (Papa as any).parse(csvText, {
     header: true,
     skipEmptyLines: true,
-    trimHeaders: true,
+    transformHeader: (h: string) => h.trim().toLowerCase(),
+    complete: (results: Papa.ParseResult<Record<string, string>>) => {
+      parseData = results;
+    },
   });
+
+  const result = parseData as Papa.ParseResult<Record<string, string>> | null;
+  if (!result) {
+    return { valid: [], errors: [{ row: 0, column: "file", value: "", message: "Failed to parse CSV." }], totalRows: 0 };
+  }
 
   if (!result.data.length) {
     return { valid: [], errors: [{ row: 0, column: "file", value: "", message: "CSV file is empty or has no data rows." }], totalRows: 0 };

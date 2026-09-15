@@ -42,7 +42,7 @@ export async function createReceivableAction(data: {
   const dueDate = new Date(parsed.data.dueDate);
   const now = new Date();
 
-  let status = ReceivableStatus.DRAFT;
+  let status: ReceivableStatus;
   if (dueDate < now) status = ReceivableStatus.OVERDUE;
   else status = ReceivableStatus.SENT;
 

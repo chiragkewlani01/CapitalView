@@ -35,7 +35,7 @@ export default async function ReceivablesPage({ searchParams }: PageProps) {
     ];
   }
 
-  const [receivables, total] = await Promise.all([
+  const [receivables, _total] = await Promise.all([
     prisma.receivable.findMany({
       where,
       orderBy: { dueDate: "asc" },
